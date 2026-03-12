@@ -1,12 +1,13 @@
 # 健康检查工具集
 
-包含五个独立模块：
+包含六个独立模块：
 
 - **K8s 平台层健康检查** — 一键检查 Kubernetes 集群健康状态，覆盖 12 个检查维度
 - **Keycloak 专项健康检查** — 一键检查 Keycloak 服务健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
 - **PostgreSQL 专项健康检查** — 一键检查 PostgreSQL 数据库健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
 - **MinIO 专项健康检查** — 一键检查 MinIO 对象存储健康状态，覆盖 6 个检查维度，兼容 K8s / Docker / VM 部署
 - **Jenkins 专项健康检查** — 一键检查 Jenkins CI/CD 健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
+- **GitLab 专项健康检查** — 一键检查 GitLab 健康状态，覆盖 8 个检查维度，兼容 K8s / Docker / VM 部署
 
 ## 安装依赖
 
@@ -508,3 +509,108 @@ python -m jenkins.main --url https://jenkins.local:8443 \
 | PVC 空间检查 | ✅ | — | — |
 | 单点风险检测（StatefulSet 副本数） | ✅ | — | — |
 | 本地进程检测 | — | — | ✅ |
+
+---
+
+## GitLab 专项健康检查
+
+针对 GitLab 自身的 8 个维度进行深度检查，兼容三种部署模式。通过 GitLab API v4 和内置健康端点获取 GitLab 内部状态，同时结合基础设施层（K8s Pod / Docker 容器 / VM 进程）进行全面诊断。
+
+数据依赖（PostgreSQL / Redis / MinIO）仅做简化的连通性检查，深度诊断请分别使用对应的专项模块。
+
+### 部署模式
+
+| 模式 | 说明 |
+|------|------|
+| `auto` | 默认，按 K8s → Docker → VM 顺序自动检测 |
+| `k8s` | Kubernetes 部署，额外检查各组件 Pod 状态、Deployment/StatefulSet 副本数、PVC 空间、单点风险 |
+| `docker` | Docker 容器部署，额外检查容器运行状态 |
+| `vm` | 虚拟机 / 裸机部署，额外检查本地进程（puma/sidekiq/gitaly/workhorse/nginx） |
+
+### 使用方法
+
+```bash
+# 最简用法（自动检测部署模式，无 Token 仅检查健康端点）
+python -m gitlab.main --url http://localhost:8080
+
+# 带 Private Access Token（启用 API 深度检查）
+python -m gitlab.main --url http://localhost:8080 --token glpat-xxxx
+
+# K8s 模式，指定 namespace 和 label
+python -m gitlab.main --url http://localhost:8080 --mode k8s \
+    --namespace default --label-selector app.kubernetes.io/name=gitlab
+
+# Docker 模式，指定容器名
+python -m gitlab.main --url http://localhost:8080 --mode docker \
+    --docker-container gitlab
+
+# VM 模式
+python -m gitlab.main --url http://localhost:8080 --mode vm --token glpat-xxxx
+
+# 只跑指定模块
+python -m gitlab.main --url http://localhost:8080 --token glpat-xxxx \
+    --check core,web,sidekiq,runner
+
+# HTTPS + 跳过 SSL 验证 + 显示详情
+python -m gitlab.main --url https://gitlab.local \
+    --no-verify-ssl --verbose --token glpat-xxxx
+```
+
+### 命令行参数
+
+**GitLab 连接：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--url` | | GitLab 基础 URL，默认 `http://localhost:8080` |
+| `--token` | `-t` | GitLab Private Token (Personal Access Token) |
+| `--no-verify-ssl` | | 跳过 SSL 证书验证 |
+| `--timeout` | | HTTP 请求超时时间，默认 15 秒 |
+
+**部署模式：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--mode` | | 部署模式：`auto` / `k8s` / `docker` / `vm` |
+| `--kubeconfig` | | kubeconfig 文件路径（K8s 模式） |
+| `--kube-context` | | kubeconfig context 名称（K8s 模式） |
+| `--namespace` | `-n` | GitLab 所在 namespace，默认 `default`（K8s 模式） |
+| `--label-selector` | `-l` | Pod label selector，默认 `app.kubernetes.io/name=gitlab`（K8s 模式） |
+| `--docker-container` | | Docker 容器名称或 ID（Docker 模式） |
+| `--docker-image` | | Docker 镜像名称，默认 `gitlab/gitlab-ce`（Docker 模式） |
+
+**检查控制：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--check` | `-c` | 只运行指定模块（逗号分隔） |
+| `--verbose` | `-v` | 显示所有详细信息 |
+
+### 检查模块
+
+| 模块名 | 说明 |
+|--------|------|
+| `core` | 1. 核心服务状态 — 各组件 Pod/容器状态（Webservice/Sidekiq/Gitaly/Shell/Toolbox/KAS/Registry）、副本数、重启次数 |
+| `web` | 2. 页面与 API 可用性 — 健康端点（health/readiness/liveness）、Web 首页、登录页、API metadata、版本信息 |
+| `gitaly` | 3. Gitaly/Repository Storage — Gitaly 连接、仓库访问、StatefulSet/PVC 状态、存储容量 |
+| `sidekiq` | 4. Sidekiq/后台任务 — 队列积压、任务延迟、失败率、进程负载、各队列详情 |
+| `dependencies` | 5. 数据依赖 — DB/Redis/Gitaly 连通性(via readiness)、后台 Migration、对象存储、K8s 层 PostgreSQL/Redis/MinIO Pod 状态 |
+| `runner` | 6. Runner 检查 — Runner 在线/离线/暂停状态、类型统计、最近 Job 成功率、K8s Runner Pod 状态 |
+| `functionality` | 7. 功能面 — 仓库浏览、用户认证、Pipeline 功能、Container Registry、Package Registry、应用设置 |
+| `risk` | 8. 风险预警 — Sidekiq 严重积压、Runner 全离线、TLS 证书过期、单点风险（单副本 Deployment/StatefulSet）、实例规模 |
+
+### 各模式检查能力对比
+
+| 检查项 | K8s | Docker | VM |
+|--------|:---:|:------:|:--:|
+| 健康端点（health/readiness/liveness） | ✅ | ✅ | ✅ |
+| API v4（版本/项目/Pipeline/Runner/Sidekiq） | ✅ | ✅ | ✅ |
+| 仓库浏览与 Git 操作验证 | ✅ | ✅ | ✅ |
+| Runner 在线状态与 Job 成功率 | ✅ | ✅ | ✅ |
+| TLS 证书过期检测 | ✅ | ✅ | ✅ |
+| 应用设置与安全配置检查 | ✅ | ✅ | ✅ |
+| 各组件 Pod/容器状态与副本数 | ✅ | ✅ | — |
+| PVC 空间检查（Gitaly 存储） | ✅ | — | — |
+| 单点风险检测（Deployment/StatefulSet 副本数） | ✅ | — | — |
+| PostgreSQL/Redis/MinIO Pod 连通性检查 | ✅ | — | — |
+| 本地进程检测（puma/sidekiq/gitaly/workhorse） | — | — | ✅ |
