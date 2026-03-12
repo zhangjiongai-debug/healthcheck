@@ -1,10 +1,11 @@
 # 健康检查工具集
 
-包含三个独立模块：
+包含四个独立模块：
 
 - **K8s 平台层健康检查** — 一键检查 Kubernetes 集群健康状态，覆盖 12 个检查维度
 - **Keycloak 专项健康检查** — 一键检查 Keycloak 服务健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
 - **PostgreSQL 专项健康检查** — 一键检查 PostgreSQL 数据库健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
+- **MinIO 专项健康检查** — 一键检查 MinIO 对象存储健康状态，覆盖 6 个检查维度，兼容 K8s / Docker / VM 部署
 
 ## 安装依赖
 
@@ -289,3 +290,113 @@ python -m postgresql.main --host 127.0.0.1 --user postgres --password secret --v
 | Split brain 检测（多 primary Pod） | ✅ | — | — |
 | 容器内磁盘空间检查 | — | ✅ | — |
 | 本地进程检测 / df / iostat | — | — | ✅ |
+
+---
+
+## MinIO 专项健康检查
+
+针对 MinIO 自身的 6 个维度进行深度检查，兼容三种部署模式。通过 S3 API 和管理接口获取 MinIO 内部状态，同时结合基础设施层（K8s Pod / Docker 容器 / VM 进程）进行全面诊断。
+
+### 部署模式
+
+| 模式 | 说明 |
+|------|------|
+| `auto` | 默认，按 K8s → Docker → VM 顺序自动检测 |
+| `k8s` | Kubernetes 部署，额外检查 Pod 状态、Deployment/StatefulSet 副本数、PVC 空间 |
+| `docker` | Docker 容器部署，额外检查容器运行状态、容器内磁盘空间 |
+| `vm` | 虚拟机 / 裸机部署，额外检查本地 minio 进程、磁盘空间、inode |
+
+### 使用方法
+
+```bash
+# 最简用法（自动检测部署模式）
+python -m minio.main --endpoint localhost:9000
+
+# 带 Access Key / Secret Key（启用 S3 和管理 API 检查）
+python -m minio.main --endpoint minio.example.com:9000 \
+    --access-key minioadmin --secret-key minioadmin
+
+# K8s 模式，指定 namespace 和 label
+python -m minio.main --endpoint localhost:9000 --mode k8s \
+    --namespace minio --label-selector app=minio
+
+# Docker 模式，指定容器名
+python -m minio.main --endpoint localhost:9000 --mode docker \
+    --docker-container my-minio
+
+# VM 模式
+python -m minio.main --endpoint localhost:9000 --mode vm \
+    --access-key minioadmin --secret-key minioadmin
+
+# 只跑指定模块
+python -m minio.main --endpoint localhost:9000 --check instance,bucket,performance
+
+# 检查必须存在的 bucket
+python -m minio.main --endpoint localhost:9000 \
+    --access-key minioadmin --secret-key minioadmin \
+    --required-buckets uploads,backups,logs
+
+# HTTPS + 跳过 SSL 验证 + 显示详情
+python -m minio.main --endpoint minio.local:9000 \
+    --secure --no-verify-ssl --verbose
+```
+
+### 命令行参数
+
+**MinIO 连接：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--endpoint` | `-e` | MinIO 端点地址，默认 `localhost:9000` |
+| `--access-key` | `-ak` | MinIO Access Key |
+| `--secret-key` | `-sk` | MinIO Secret Key |
+| `--secure` | | 使用 HTTPS 连接 |
+| `--no-verify-ssl` | | 跳过 SSL 证书验证 |
+| `--timeout` | | HTTP 请求超时时间，默认 10 秒 |
+
+**部署模式：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--mode` | | 部署模式：`auto` / `k8s` / `docker` / `vm` |
+| `--kubeconfig` | | kubeconfig 文件路径（K8s 模式） |
+| `--kube-context` | | kubeconfig context 名称（K8s 模式） |
+| `--namespace` | `-n` | MinIO 所在 namespace，默认 `default`（K8s 模式） |
+| `--label-selector` | `-l` | Pod label selector，默认 `app=minio`（K8s 模式） |
+| `--docker-container` | | Docker 容器名称或 ID（Docker 模式） |
+| `--docker-image` | | Docker 镜像名称，默认 `minio/minio`（Docker 模式） |
+
+**检查控制：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--check` | `-c` | 只运行指定模块（逗号分隔） |
+| `--verbose` | `-v` | 显示所有详细信息 |
+| `--required-buckets` | | 必须存在的 bucket（逗号分隔） |
+
+### 检查模块
+
+| 模块名 | 说明 |
+|--------|------|
+| `instance` | 5.1 实例与集群状态 — Pod/容器运行状态、副本数、健康端点、集群节点在线、磁盘状态、运行模式与版本 |
+| `storage` | 5.2 存储层状态 — 磁盘空间使用率、只读检测、离线磁盘、PVC 状态、inode 使用率、存储延迟 |
+| `bucket` | 5.3 Bucket 与对象服务能力 — bucket 列表、必需 bucket 检查、S3 CRUD 测试（PUT/GET/LIST/DELETE）、Presigned URL、bucket 访问策略 |
+| `admin` | 5.4 管理与认证 — 管理控制台可达性、Access Key/Secret Key 验证、用户/策略列表、OIDC/LDAP 对接 |
+| `data` | 5.5 数据保护与后台任务 — versioning 状态、lifecycle 规则、站点复制、self-heal 任务、后台扫描状态 |
+| `performance` | 5.6 性能与告警 — 5xx 错误率、请求延迟(TTFB)、网络吞吐、集群磁盘使用率、节点降级、quorum 风险、对象数量 |
+
+### 各模式检查能力对比
+
+| 检查项 | K8s | Docker | VM |
+|--------|:---:|:------:|:--:|
+| S3 层检查（bucket/对象 CRUD/presigned URL） | ✅ | ✅ | ✅ |
+| 健康端点（liveness/readiness/cluster） | ✅ | ✅ | ✅ |
+| Prometheus Metrics（延迟/错误率/吞吐） | ✅ | ✅ | ✅ |
+| mc admin info（集群节点/磁盘/版本） | ✅ | ✅ | ✅ |
+| 认证与策略检查 | ✅ | ✅ | ✅ |
+| 数据保护（versioning/lifecycle/replication） | ✅ | ✅ | ✅ |
+| Quorum 风险检测 | ✅ | ✅ | ✅ |
+| Pod/容器状态与副本数 | ✅ | ✅ | — |
+| PVC 空间检查 | ✅ | — | — |
+| 容器内磁盘空间检查 | — | ✅ | — |
+| 本地进程检测 / df / inode | — | — | ✅ |
