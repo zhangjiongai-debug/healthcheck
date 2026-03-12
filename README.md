@@ -1,9 +1,10 @@
 # 健康检查工具集
 
-包含两个独立模块：
+包含三个独立模块：
 
 - **K8s 平台层健康检查** — 一键检查 Kubernetes 集群健康状态，覆盖 12 个检查维度
 - **Keycloak 专项健康检查** — 一键检查 Keycloak 服务健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
+- **PostgreSQL 专项健康检查** — 一键检查 PostgreSQL 数据库健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
 
 ## 安装依赖
 
@@ -176,3 +177,115 @@ python -m keycloak.main --url https://keycloak.local:8443 \
 | Headless Service / Session Affinity | ✅ | — | — |
 | Service 暴露检查 | ✅ | — | — |
 | Realm 多副本漂移检测 | ✅ | — | — |
+
+---
+
+## PostgreSQL 专项健康检查
+
+针对 PostgreSQL 自身的 7 个维度进行深度检查，兼容三种部署模式。通过 SQL 查询获取数据库内部状态，同时结合基础设施层（K8s Pod / Docker 容器 / VM 进程）进行全面诊断。
+
+### 部署模式
+
+| 模式 | 说明 |
+|------|------|
+| `auto` | 默认，按 K8s → Docker → VM 顺序自动检测 |
+| `k8s` | Kubernetes 部署，额外检查 Pod 状态、StatefulSet 副本数、PVC 空间、Operator 检测 |
+| `docker` | Docker 容器部署，额外检查容器运行状态、容器内磁盘空间 |
+| `vm` | 虚拟机 / 裸机部署，额外检查本地 postgres 进程、磁盘空间、I/O |
+
+### 使用方法
+
+```bash
+# 最简用法（自动检测部署模式）
+python -m postgresql.main --host 127.0.0.1 --user postgres --password secret
+
+# 指定数据库和端口
+python -m postgresql.main --host pg.example.com --port 5432 \
+    --user postgres --password secret --dbname mydb
+
+# K8s 模式，指定 namespace 和 label
+python -m postgresql.main --host 127.0.0.1 --port 15432 \
+    --user postgres --password secret --mode k8s \
+    --namespace postgres --label-selector app.kubernetes.io/name=postgresql
+
+# Docker 模式，指定容器名
+python -m postgresql.main --host 127.0.0.1 --mode docker \
+    --user postgres --password secret \
+    --docker-container my-postgres
+
+# VM 模式
+python -m postgresql.main --host 127.0.0.1 --mode vm \
+    --user postgres --password secret
+
+# 只跑指定模块
+python -m postgresql.main --host 127.0.0.1 --user postgres --password secret \
+    --check instance,connection,risk
+
+# 检查指定业务数据库是否存在且可连接
+python -m postgresql.main --host 127.0.0.1 --user postgres --password secret \
+    --check-databases mydb1,mydb2,mydb3
+
+# 显示详情
+python -m postgresql.main --host 127.0.0.1 --user postgres --password secret --verbose
+```
+
+### 命令行参数
+
+**PostgreSQL 连接：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--host` | `-H` | PostgreSQL 主机地址，默认 `127.0.0.1` |
+| `--port` | `-p` | PostgreSQL 端口，默认 `5432` |
+| `--user` | `-U` | PostgreSQL 用户名，默认 `postgres` |
+| `--password` | `-W` | PostgreSQL 密码 |
+| `--dbname` | `-d` | 连接的数据库名，默认 `postgres` |
+| `--connect-timeout` | | 连接超时时间（秒），默认 `10` |
+
+**部署模式：**
+
+| 参数 | 说明 |
+|------|------|
+| `--mode` | 部署模式：`auto` / `k8s` / `docker` / `vm` |
+| `--kubeconfig` | kubeconfig 文件路径（K8s 模式） |
+| `--kube-context` | kubeconfig context 名称（K8s 模式） |
+| `--namespace` / `-n` | PostgreSQL 所在 namespace，默认 `default`（K8s 模式） |
+| `--label-selector` / `-l` | Pod label selector，默认 `app=postgresql`（K8s 模式） |
+| `--docker-container` | Docker 容器名称或 ID（Docker 模式） |
+| `--docker-image` | Docker 镜像名称，默认 `postgres`（Docker 模式） |
+
+**检查控制：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--check` | `-c` | 只运行指定模块（逗号分隔） |
+| `--verbose` | `-v` | 显示所有详细信息 |
+| `--check-databases` | | 需要检查的业务数据库（逗号分隔） |
+
+### 检查模块
+
+| 模块名 | 说明 |
+|--------|------|
+| `instance` | 6.1 实例基础状态 — PG 版本、主从角色、可读可写验证、进程运行时长、Pod/容器状态、副本数 |
+| `connection` | 6.2 连接与认证 — 端口可达性、用户认证、业务库连通、连接数使用率、idle in transaction、PgBouncer 检测 |
+| `replication` | 6.3 主从复制/高可用 — WAL sender/receiver 状态、复制延迟（时间+字节）、复制槽、Patroni/repmgr/Operator 检测、split brain 风险 |
+| `storage` | 6.4 存储与 WAL — 数据目录空间、数据库大小、PVC 状态、WAL 大小与堆积、checkpoint 频率、WAL 归档、磁盘 I/O |
+| `internal` | 6.5 数据库内部健康 — SQL 执行、系统表可查、锁等待、deadlock、长事务、autovacuum 状态与及时性、表膨胀、无效索引、事务回滚率 |
+| `backup` | 6.6 备份与恢复 — base backup 状态、WAL 归档连续性、RPO 评估、备份进度、pgBackRest/barman/wal-g 检测 |
+| `risk` | 6.7 风险预警 — 连接数耗尽、复制延迟升高、XID wraparound、长事务阻塞 vacuum、checkpoint 过密、锁冲突、归档失败、角色异常 |
+
+### 各模式检查能力对比
+
+| 检查项 | K8s | Docker | VM |
+|--------|:---:|:------:|:--:|
+| SQL 层检查（连接/复制/锁/事务/vacuum/bloat） | ✅ | ✅ | ✅ |
+| WAL / Checkpoint / 归档状态 | ✅ | ✅ | ✅ |
+| 备份工具检测（pgBackRest/barman/wal-g） | ✅ | ✅ | ✅ |
+| XID Wraparound 风险检测 | ✅ | ✅ | ✅ |
+| HA 管理器检测（Patroni/repmgr） | ✅ | ✅ | ✅ |
+| Pod/容器状态与副本数 | ✅ | ✅ | — |
+| PVC 空间检查 | ✅ | — | — |
+| Operator 检测（Zalando/CloudNativePG/CrunchyData） | ✅ | — | — |
+| Split brain 检测（多 primary Pod） | ✅ | — | — |
+| 容器内磁盘空间检查 | — | ✅ | — |
+| 本地进程检测 / df / iostat | — | — | ✅ |
