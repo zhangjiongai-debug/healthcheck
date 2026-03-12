@@ -1,11 +1,12 @@
 # 健康检查工具集
 
-包含四个独立模块：
+包含五个独立模块：
 
 - **K8s 平台层健康检查** — 一键检查 Kubernetes 集群健康状态，覆盖 12 个检查维度
 - **Keycloak 专项健康检查** — 一键检查 Keycloak 服务健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
 - **PostgreSQL 专项健康检查** — 一键检查 PostgreSQL 数据库健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
 - **MinIO 专项健康检查** — 一键检查 MinIO 对象存储健康状态，覆盖 6 个检查维度，兼容 K8s / Docker / VM 部署
+- **Jenkins 专项健康检查** — 一键检查 Jenkins CI/CD 健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
 
 ## 安装依赖
 
@@ -400,3 +401,110 @@ python -m minio.main --endpoint minio.local:9000 \
 | PVC 空间检查 | ✅ | — | — |
 | 容器内磁盘空间检查 | — | ✅ | — |
 | 本地进程检测 / df / inode | — | — | ✅ |
+
+---
+
+## Jenkins 专项健康检查
+
+针对 Jenkins 自身的 7 个维度进行深度检查，兼容三种部署模式。通过 Jenkins JSON API 和 Script Console (Groovy) 获取内部状态，同时结合基础设施层（K8s Pod / Docker 容器 / VM 进程）进行全面诊断。
+
+### 部署模式
+
+| 模式 | 说明 |
+|------|------|
+| `auto` | 默认，按 K8s → Docker → VM 顺序自动检测 |
+| `k8s` | Kubernetes 部署，额外检查 Pod 状态、StatefulSet 副本数、PVC 空间 |
+| `docker` | Docker 容器部署，额外检查容器运行状态 |
+| `vm` | 虚拟机 / 裸机部署，额外检查本地 jenkins 进程 |
+
+### 使用方法
+
+```bash
+# 最简用法（自动检测部署模式，无认证仅检查基础项）
+python -m jenkins.main --url http://localhost:8080
+
+# 带管理员凭证（启用 Script Console 深度检查）
+python -m jenkins.main --url http://localhost:8080 \
+    --user admin --password secret
+
+# K8s 模式，指定 namespace 和 label
+python -m jenkins.main --url http://localhost:8080 --mode k8s \
+    --namespace jenkins --label-selector app.kubernetes.io/name=jenkins
+
+# Docker 模式，指定容器名
+python -m jenkins.main --url http://localhost:8080 --mode docker \
+    --docker-container my-jenkins
+
+# VM 模式
+python -m jenkins.main --url http://localhost:8080 --mode vm \
+    --user admin --password secret
+
+# 只跑指定模块
+python -m jenkins.main --url http://localhost:8080 \
+    --user admin --password secret \
+    --check controller,plugin,agent
+
+# HTTPS + 跳过 SSL 验证 + 显示详情
+python -m jenkins.main --url https://jenkins.local:8443 \
+    --no-verify-ssl --verbose
+```
+
+### 命令行参数
+
+**Jenkins 连接：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--url` | | Jenkins 基础 URL，默认 `http://localhost:8080` |
+| `--user` | `-u` | Jenkins 用户名 |
+| `--password` | `-p` | Jenkins 密码或 API Token |
+| `--no-verify-ssl` | | 跳过 SSL 证书验证 |
+| `--timeout` | | HTTP 请求超时时间，默认 15 秒 |
+
+**部署模式：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--mode` | | 部署模式：`auto` / `k8s` / `docker` / `vm` |
+| `--kubeconfig` | | kubeconfig 文件路径（K8s 模式） |
+| `--kube-context` | | kubeconfig context 名称（K8s 模式） |
+| `--namespace` | `-n` | Jenkins 所在 namespace，默认 `default`（K8s 模式） |
+| `--label-selector` | `-l` | Pod label selector，默认 `app.kubernetes.io/name=jenkins`（K8s 模式） |
+| `--docker-container` | | Docker 容器名称或 ID（Docker 模式） |
+| `--docker-image` | | Docker 镜像名称，默认 `jenkins/jenkins`（Docker 模式） |
+
+**检查控制：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--check` | `-c` | 只运行指定模块（逗号分隔） |
+| `--verbose` | `-v` | 显示所有详细信息 |
+
+### 检查模块
+
+| 模块名 | 说明 |
+|--------|------|
+| `controller` | 1. 控制器状态 — Web UI/API 可达性、登录页、Pod/容器状态、副本数、重启次数 |
+| `init` | 2. 初始化与配置 — 启动完成检查、系统日志 SEVERE 错误、JCasC 配置、安全域/授权策略、CSRF 保护 |
+| `plugin` | 3. 插件健康 — 插件总数与状态、加载失败插件、插件依赖完整性、可更新插件 |
+| `agent` | 4. Agent/Executor — 节点在线/离线状态、Executor 数量与利用率、K8s Cloud 配置、离线原因 |
+| `job` | 5. Job/Pipeline — 构建队列积压、卡住的任务、Job 总数、长时间构建检测、24h 构建失败率 |
+| `dependency` | 6. 依赖检查 — Jenkins Home 磁盘空间、PVC 状态、Credentials 配置、Git 工具、SMTP 邮件通知 |
+| `performance` | 7. 性能与风险 — JVM 堆内存、GC 次数与耗时、线程数/死锁检测、单副本风险、Agent 全离线风险 |
+
+### 各模式检查能力对比
+
+| 检查项 | K8s | Docker | VM |
+|--------|:---:|:------:|:--:|
+| JSON API / Web UI 检查 | ✅ | ✅ | ✅ |
+| Script Console (Groovy) 深度检查 | ✅ | ✅ | ✅ |
+| 插件状态与依赖 | ✅ | ✅ | ✅ |
+| Agent/Executor 状态 | ✅ | ✅ | ✅ |
+| Job/Pipeline/构建队列 | ✅ | ✅ | ✅ |
+| JVM 内存/GC/线程/死锁 | ✅ | ✅ | ✅ |
+| K8s Cloud 动态 Agent 配置 | ✅ | ✅ | ✅ |
+| Credentials / SCM / 邮件配置 | ✅ | ✅ | ✅ |
+| Pod/容器状态与副本数 | ✅ | ✅ | — |
+| PVC 空间检查 | ✅ | — | — |
+| 单点风险检测（StatefulSet 副本数） | ✅ | — | — |
+| 本地进程检测 | — | — | ✅ |
