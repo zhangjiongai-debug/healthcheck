@@ -1,6 +1,6 @@
 # 健康检查工具集
 
-包含六个独立模块：
+包含七个独立模块：
 
 - **K8s 平台层健康检查** — 一键检查 Kubernetes 集群健康状态，覆盖 12 个检查维度
 - **Keycloak 专项健康检查** — 一键检查 Keycloak 服务健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
@@ -8,6 +8,7 @@
 - **MinIO 专项健康检查** — 一键检查 MinIO 对象存储健康状态，覆盖 6 个检查维度，兼容 K8s / Docker / VM 部署
 - **Jenkins 专项健康检查** — 一键检查 Jenkins CI/CD 健康状态，覆盖 7 个检查维度，兼容 K8s / Docker / VM 部署
 - **GitLab 专项健康检查** — 一键检查 GitLab 健康状态，覆盖 8 个检查维度，兼容 K8s / Docker / VM 部署
+- **APISIX 专项健康检查** — 一键检查 APISIX 网关与 Dashboard 健康状态，覆盖 8 个检查维度，兼容 K8s / Docker / VM 部署
 
 ## 安装依赖
 
@@ -93,7 +94,7 @@ python -m keycloak.main --url http://localhost:8080
 
 # 带管理员凭证（启用 Admin API 相关检查）
 python -m keycloak.main --url https://keycloak.example.com \
-    --admin-user admin --admin-password secret
+    --admin-user admin --admin-password <YOUR_PASSWORD>
 
 # K8s 模式，指定 namespace 和 label
 python -m keycloak.main --url http://localhost:8080 --mode k8s \
@@ -105,14 +106,14 @@ python -m keycloak.main --url http://localhost:8080 --mode docker \
 
 # VM 模式
 python -m keycloak.main --url http://localhost:8080 --mode vm \
-    --admin-user admin --admin-password secret
+    --admin-user admin --admin-password <YOUR_PASSWORD>
 
 # 只跑指定模块
 python -m keycloak.main --url http://localhost:8080 --check instance,auth,security
 
 # 指定必须存在的 realm 和 client
 python -m keycloak.main --url http://localhost:8080 \
-    --admin-user admin --admin-password secret \
+    --admin-user admin --admin-password <YOUR_PASSWORD> \
     --required-realms master,myrealm \
     --required-clients "myrealm:frontend-app,backend-api"
 
@@ -200,36 +201,36 @@ python -m keycloak.main --url https://keycloak.local:8443 \
 
 ```bash
 # 最简用法（自动检测部署模式）
-python -m postgresql.main --host 127.0.0.1 --user postgres --password secret
+python -m postgresql.main --host 127.0.0.1 --user postgres --password <YOUR_PASSWORD>
 
 # 指定数据库和端口
 python -m postgresql.main --host pg.example.com --port 5432 \
-    --user postgres --password secret --dbname mydb
+    --user postgres --password <YOUR_PASSWORD> --dbname mydb
 
 # K8s 模式，指定 namespace 和 label
 python -m postgresql.main --host 127.0.0.1 --port 15432 \
-    --user postgres --password secret --mode k8s \
+    --user postgres --password <YOUR_PASSWORD> --mode k8s \
     --namespace postgres --label-selector app.kubernetes.io/name=postgresql
 
 # Docker 模式，指定容器名
 python -m postgresql.main --host 127.0.0.1 --mode docker \
-    --user postgres --password secret \
+    --user postgres --password <YOUR_PASSWORD> \
     --docker-container my-postgres
 
 # VM 模式
 python -m postgresql.main --host 127.0.0.1 --mode vm \
-    --user postgres --password secret
+    --user postgres --password <YOUR_PASSWORD>
 
 # 只跑指定模块
-python -m postgresql.main --host 127.0.0.1 --user postgres --password secret \
+python -m postgresql.main --host 127.0.0.1 --user postgres --password <YOUR_PASSWORD> \
     --check instance,connection,risk
 
 # 检查指定业务数据库是否存在且可连接
-python -m postgresql.main --host 127.0.0.1 --user postgres --password secret \
+python -m postgresql.main --host 127.0.0.1 --user postgres --password <YOUR_PASSWORD> \
     --check-databases mydb1,mydb2,mydb3
 
 # 显示详情
-python -m postgresql.main --host 127.0.0.1 --user postgres --password secret --verbose
+python -m postgresql.main --host 127.0.0.1 --user postgres --password <YOUR_PASSWORD> --verbose
 ```
 
 ### 命令行参数
@@ -316,7 +317,7 @@ python -m minio.main --endpoint localhost:9000
 
 # 带 Access Key / Secret Key（启用 S3 和管理 API 检查）
 python -m minio.main --endpoint minio.example.com:9000 \
-    --access-key minioadmin --secret-key minioadmin
+    --access-key <YOUR_ACCESS_KEY> --secret-key <YOUR_SECRET_KEY>
 
 # K8s 模式，指定 namespace 和 label
 python -m minio.main --endpoint localhost:9000 --mode k8s \
@@ -328,14 +329,14 @@ python -m minio.main --endpoint localhost:9000 --mode docker \
 
 # VM 模式
 python -m minio.main --endpoint localhost:9000 --mode vm \
-    --access-key minioadmin --secret-key minioadmin
+    --access-key <YOUR_ACCESS_KEY> --secret-key <YOUR_SECRET_KEY>
 
 # 只跑指定模块
 python -m minio.main --endpoint localhost:9000 --check instance,bucket,performance
 
 # 检查必须存在的 bucket
 python -m minio.main --endpoint localhost:9000 \
-    --access-key minioadmin --secret-key minioadmin \
+    --access-key <YOUR_ACCESS_KEY> --secret-key <YOUR_SECRET_KEY> \
     --required-buckets uploads,backups,logs
 
 # HTTPS + 跳过 SSL 验证 + 显示详情
@@ -426,7 +427,7 @@ python -m jenkins.main --url http://localhost:8080
 
 # 带管理员凭证（启用 Script Console 深度检查）
 python -m jenkins.main --url http://localhost:8080 \
-    --user admin --password secret
+    --user admin --password <YOUR_PASSWORD>
 
 # K8s 模式，指定 namespace 和 label
 python -m jenkins.main --url http://localhost:8080 --mode k8s \
@@ -438,11 +439,11 @@ python -m jenkins.main --url http://localhost:8080 --mode docker \
 
 # VM 模式
 python -m jenkins.main --url http://localhost:8080 --mode vm \
-    --user admin --password secret
+    --user admin --password <YOUR_PASSWORD>
 
 # 只跑指定模块
 python -m jenkins.main --url http://localhost:8080 \
-    --user admin --password secret \
+    --user admin --password <YOUR_PASSWORD> \
     --check controller,plugin,agent
 
 # HTTPS + 跳过 SSL 验证 + 显示详情
@@ -534,7 +535,7 @@ python -m jenkins.main --url https://jenkins.local:8443 \
 python -m gitlab.main --url http://localhost:8080
 
 # 带 Private Access Token（启用 API 深度检查）
-python -m gitlab.main --url http://localhost:8080 --token glpat-xxxx
+python -m gitlab.main --url http://localhost:8080 --token <YOUR_TOKEN>
 
 # K8s 模式，指定 namespace 和 label
 python -m gitlab.main --url http://localhost:8080 --mode k8s \
@@ -545,15 +546,15 @@ python -m gitlab.main --url http://localhost:8080 --mode docker \
     --docker-container gitlab
 
 # VM 模式
-python -m gitlab.main --url http://localhost:8080 --mode vm --token glpat-xxxx
+python -m gitlab.main --url http://localhost:8080 --mode vm --token <YOUR_TOKEN>
 
 # 只跑指定模块
-python -m gitlab.main --url http://localhost:8080 --token glpat-xxxx \
+python -m gitlab.main --url http://localhost:8080 --token <YOUR_TOKEN> \
     --check core,web,sidekiq,runner
 
 # HTTPS + 跳过 SSL 验证 + 显示详情
 python -m gitlab.main --url https://gitlab.local \
-    --no-verify-ssl --verbose --token glpat-xxxx
+    --no-verify-ssl --verbose --token <YOUR_TOKEN>
 ```
 
 ### 命令行参数
@@ -614,3 +615,147 @@ python -m gitlab.main --url https://gitlab.local \
 | 单点风险检测（Deployment/StatefulSet 副本数） | ✅ | — | — |
 | PostgreSQL/Redis/MinIO Pod 连通性检查 | ✅ | — | — |
 | 本地进程检测（puma/sidekiq/gitaly/workhorse） | — | — | ✅ |
+
+---
+
+## APISIX 专项健康检查
+
+针对 APISIX 网关与 APISIX Dashboard 自身的 8 个维度进行深度检查，兼容三种部署模式。通过 Admin API 获取路由、Upstream、插件、SSL 证书等配置状态，同时结合基础设施层（K8s Pod / Docker 容器 / VM 进程）进行全面诊断。
+
+### 部署模式
+
+| 模式 | 说明 |
+|------|------|
+| `auto` | 默认，按 K8s → Docker → VM 顺序自动检测 |
+| `k8s` | Kubernetes 部署，额外检查 Pod 状态、Deployment 副本数、etcd Pod、Ingress Controller、PVC |
+| `docker` | Docker 容器部署，额外检查容器运行状态、健康标记、重启次数 |
+| `vm` | 虚拟机 / 裸机部署，额外检查本地 apisix / nginx worker 进程 |
+
+### 使用方法
+
+```bash
+# 最简用法（自动检测部署模式）
+python -m apisix.main --admin-url http://localhost:9180
+
+# 带 Admin API Key
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY>
+
+# 同时检查 Dashboard
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --dashboard-url http://localhost:9000
+
+# 带 Dashboard 登录测试
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --dashboard-url http://localhost:9000 \
+    --dashboard-user admin --dashboard-pass <YOUR_PASSWORD>
+
+# 带 Gateway 端口可达性检测
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --gateway-url http://localhost:9080
+
+# K8s 模式，指定 namespace
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --mode k8s --namespace apisix
+
+# K8s 模式，自定义 label selector
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --mode k8s --namespace my-ns \
+    --label-selector "app=my-apisix"
+
+# Docker 模式，指定容器名
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --mode docker --docker-container apisix
+
+# VM 模式
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --mode vm
+
+# 只跑指定模块
+python -m apisix.main --admin-url http://localhost:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --check core,route,plugin,risk
+
+# HTTPS + 跳过 SSL 验证 + 显示详情
+python -m apisix.main --admin-url https://apisix.local:9180 \
+    --admin-key <YOUR_ADMIN_KEY> \
+    --no-verify-ssl --verbose
+```
+
+### 命令行参数
+
+**APISIX 连接：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--admin-url` | | Admin API 地址，默认 `http://localhost:9180` |
+| `--admin-key` | `-k` | Admin API Key |
+| `--gateway-url` | | Gateway 地址（如 `http://localhost:9080`） |
+| `--no-verify-ssl` | | 跳过 SSL 证书验证 |
+| `--timeout` | | HTTP 请求超时时间，默认 15 秒 |
+
+**Dashboard 连接（可选）：**
+
+| 参数 | 说明 |
+|------|------|
+| `--dashboard-url` | Dashboard 地址（如 `http://localhost:9000`） |
+| `--dashboard-user` | Dashboard 用户名 |
+| `--dashboard-pass` | Dashboard 密码 |
+
+**部署模式：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--mode` | | 部署模式：`auto` / `k8s` / `docker` / `vm` |
+| `--kubeconfig` | | kubeconfig 文件路径（K8s 模式） |
+| `--kube-context` | | kubeconfig context 名称（K8s 模式） |
+| `--namespace` | `-n` | APISIX 所在 namespace，默认 `apisix`（K8s 模式） |
+| `--label-selector` | `-l` | APISIX Pod label selector，默认 `app.kubernetes.io/name=apisix`（K8s 模式） |
+| `--dashboard-label-selector` | | Dashboard Pod label selector，默认 `app.kubernetes.io/name=apisix-dashboard` |
+| `--docker-container` | | APISIX Docker 容器名称或 ID（Docker 模式） |
+| `--docker-image` | | APISIX Docker 镜像名称，默认 `apache/apisix`（Docker 模式） |
+| `--dashboard-docker-container` | | Dashboard Docker 容器名称或 ID |
+| `--dashboard-docker-image` | | Dashboard Docker 镜像名称，默认 `apache/apisix-dashboard` |
+
+**检查控制：**
+
+| 参数 | 缩写 | 说明 |
+|------|------|------|
+| `--check` | `-c` | 只运行指定模块（逗号分隔） |
+| `--verbose` | `-v` | 显示所有详细信息 |
+
+### 检查模块
+
+| 模块名 | 说明 |
+|--------|------|
+| `core` | 1. 核心组件状态 — APISIX/Dashboard Pod/容器/进程状态、Deployment 副本数、重启次数 |
+| `plane` | 2. 控制面与数据面 — Admin API 可用性、etcd Pod 状态、Ingress Controller、插件加载数量 |
+| `route` | 3. Route/Upstream/Service/Consumer — 路由配置合法性、Upstream 节点数、Consumer 认证插件完整性 |
+| `traffic` | 4. 流量与错误检查 — Prometheus 指标分析（4xx/5xx 错误率、P99 延迟）、Gateway 端口可达性 |
+| `plugin` | 5. 插件专项 — 认证/限流/可观测/安全插件可用性、Prometheus 插件状态、路由插件使用统计 |
+| `tls` | 6. 证书与 TLS — APISIX SSL 资源过期检测、SNI 配置、端点 TLS 握手验证 |
+| `dashboard` | 7. Dashboard 检查 — 版本信息、首页可达性、登录功能、与 Admin API 数据同步 |
+| `risk` | 8. 风险预警 — etcd 单点风险、APISIX 单副本风险、路由空后端、插件加载异常、证书过期、PVC 异常 |
+
+### 各模式检查能力对比
+
+| 检查项 | K8s | Docker | VM |
+|--------|:---:|:------:|:--:|
+| Admin API（路由/Upstream/Consumer/SSL/插件） | ✅ | ✅ | ✅ |
+| Prometheus 指标（4xx/5xx/延迟） | ✅ | ✅ | ✅ |
+| Gateway 端口可达性 | ✅ | ✅ | ✅ |
+| SSL 证书过期检测（Admin API 配置 + 端点 TLS） | ✅ | ✅ | ✅ |
+| Dashboard 版本/页面/登录检查 | ✅ | ✅ | ✅ |
+| APISIX/Dashboard Pod 状态与副本数 | ✅ | ✅ | — |
+| etcd Pod 状态 | ✅ | — | — |
+| Ingress Controller Pod 状态 | ✅ | — | — |
+| PVC 状态检查 | ✅ | — | — |
+| Docker 容器健康状态与重启次数 | — | ✅ | — |
+| 本地进程检测（apisix/nginx worker） | — | — | ✅ |
